@@ -29,6 +29,34 @@
     overflow-x: hidden;
   }
 
+  /* ── MUSIC TOGGLE BUTTON ── */
+  #music-btn {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    z-index: 999;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 1px solid var(--gold);
+    background: rgba(26,18,8,0.85);
+    backdrop-filter: blur(8px);
+    color: var(--gold);
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  #music-btn:hover {
+    background: var(--gold);
+    color: var(--deep);
+    transform: scale(1.1);
+  }
+  #music-btn .music-icon { transition: all 0.2s; }
+
   /* ── HERO ── */
   .hero {
     min-height: 100vh;
@@ -338,13 +366,19 @@
 </head>
 <body>
 
-<!-- Audio Elements -->
-<audio id="bg-melody" loop>
+<!-- ══ AUDIO ELEMENTS ══ -->
+<!-- Place melody.mp3 and success.mp3 in the same folder as this index.html -->
+<audio id="bg-music" loop preload="auto">
   <source src="melody.mp3" type="audio/mpeg">
 </audio>
-<audio id="success-sound">
+<audio id="success-music" preload="auto">
   <source src="success.mp3" type="audio/mpeg">
 </audio>
+
+<!-- ══ MUSIC TOGGLE BUTTON ══ -->
+<button id="music-btn" title="Toggle music" aria-label="Toggle background music">
+  <span class="music-icon" id="music-icon">♪</span>
+</button>
 
 <!-- ══ HERO ══ -->
 <section class="hero" id="top">
@@ -630,29 +664,90 @@
 </footer>
 
 <script>
-/* ── Audio Control ── */
-const melody = document.getElementById('bg-melody');
-const successSound = document.getElementById('success-sound');
+/* ══════════════════════════════════════════
+   MUSIC SYSTEM
+   ══════════════════════════════════════════ */
+const bgMusic = document.getElementById('bg-music');
+const successMusic = document.getElementById('success-music');
+const musicBtn = document.getElementById('music-btn');
+const musicIcon = document.getElementById('music-icon');
 
-// Start background melody on first click anywhere on page
-document.body.addEventListener('click', () => {
-    if (melody.paused) {
-        melody.play().catch(e => console.log("Audio play blocked"));
-        melody.volume = 0.5; // Starts at 50% volume
-    }
-}, { once: true });
+let musicStarted = false; // has bg music been started at least once?
+let musicMuted = false; // is the user currently muted?
 
-/* ── Countdown ── */
+bgMusic.volume = 0.45; // comfortable background level
+successMusic.volume = 0.8; // clearer for the celebratory moment
+
+/* Start bg music on the very first user interaction */
+function startMusicOnFirstInteraction() {
+  if (musicStarted) return;
+  musicStarted = true;
+  bgMusic.play().catch(() => {}); // play — silently ignore if browser still blocks
+  musicIcon.textContent = '♫';
+  /* Remove listeners once triggered */
+  document.removeEventListener('click', startMusicOnFirstInteraction);
+  document.removeEventListener('touchstart', startMusicOnFirstInteraction);
+  document.removeEventListener('keydown', startMusicOnFirstInteraction);
+}
+
+document.addEventListener('click', startMusicOnFirstInteraction);
+document.addEventListener('touchstart', startMusicOnFirstInteraction, { passive: true });
+document.addEventListener('keydown', startMusicOnFirstInteraction);
+
+/* Toggle mute / unmute via the floating button */
+musicBtn.addEventListener('click', (e) => {
+  e.stopPropagation(); // don't re-trigger the global first-click handler
+
+  if (!musicStarted) {
+    /* First ever interaction happened to be this button */
+    musicStarted = true;
+    bgMusic.play().catch(() => {});
+    musicMuted = false;
+    musicIcon.textContent = '♫';
+    return;
+  }
+
+  musicMuted = !musicMuted;
+  if (musicMuted) {
+    bgMusic.pause();
+    musicIcon.textContent = '♩';
+    musicBtn.title = 'Unmute music';
+  } else {
+    bgMusic.play().catch(() => {});
+    musicIcon.textContent = '♫';
+    musicBtn.title = 'Mute music';
+  }
+});
+
+/* Play success music when RSVP is submitted */
+function playSuccessSound() {
+  /* Pause bg music gently while success sound plays */
+  bgMusic.pause();
+
+  successMusic.currentTime = 0;
+  successMusic.play().catch(() => {});
+
+  /* Resume bg music after success sound ends (or after 8s fallback) */
+  successMusic.onended = () => {
+    if (!musicMuted) bgMusic.play().catch(() => {});
+  };
+  setTimeout(() => {
+    if (!musicMuted && bgMusic.paused) bgMusic.play().catch(() => {});
+  }, 8000);
+}
+
+
+/* ══════════════════════════════════════════
+   COUNTDOWN
+   ══════════════════════════════════════════ */
 const weddingDate = new Date('2026-02-14T10:00:00');
 
 function updateCountdown() {
   const now = new Date();
   const diff = weddingDate - now;
   if (diff <= 0) {
-    document.getElementById('cd-days').textContent = '00';
-    document.getElementById('cd-hours').textContent = '00';
-    document.getElementById('cd-mins').textContent = '00';
-    document.getElementById('cd-secs').textContent = '00';
+    ['cd-days','cd-hours','cd-mins','cd-secs'].forEach(id =>
+      document.getElementById(id).textContent = '00');
     return;
   }
   const d = Math.floor(diff / 86400000);
@@ -667,7 +762,10 @@ function updateCountdown() {
 updateCountdown();
 setInterval(updateCountdown, 1000);
 
-/* ── RSVP Local Storage ── */
+
+/* ══════════════════════════════════════════
+   RSVP — LOCAL STORAGE
+   ══════════════════════════════════════════ */
 function loadRsvpData() {
   try { return JSON.parse(localStorage.getItem('wedding_rsvps') || '[]'); } catch(e) { return []; }
 }
@@ -679,7 +777,7 @@ function updateCounters() {
   const data = loadRsvpData();
   const attending = data.filter(r => r.attending === 'yes');
   const decline = data.filter(r => r.attending === 'no');
-  const totalGuests = attending.reduce((sum, r) => sum + (parseInt(r.guests) || 1), 0);
+  const totalGuests= attending.reduce((sum, r) => sum + (parseInt(r.guests) || 1), 0);
   document.getElementById('cnt-total').textContent = data.length;
   document.getElementById('cnt-attending').textContent = attending.length;
   document.getElementById('cnt-guests').textContent = totalGuests;
@@ -687,16 +785,14 @@ function updateCounters() {
 }
 updateCounters();
 
-/* ── Toggle guest section ── */
 function toggleGuests() {
   const yes = document.getElementById('f-yes').checked;
   document.getElementById('guest-section').style.display = yes ? 'block' : 'none';
 }
 
-/* ── Google Sheet URL — PASTE YOUR URL HERE ── */
+/* Google Sheet URL */
 const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyCqcnKMkALk8CcoatYUwaH0wEptimlJ8wLgo_Fjdfxgw4FO5J3TJTSYWsSIm43WQHF/exec';
 
-/* ── Submit RSVP ── */
 function submitRsvp(e) {
   e.preventDefault();
 
@@ -717,11 +813,7 @@ function submitRsvp(e) {
     timestamp: new Date().toISOString()
   };
 
-  /* AUDIO TRIGGER */
-  melody.pause(); // Stop background melody
-  successSound.play(); // Play success sound
-
-  /* Save locally */
+  /* Save locally & update counters */
   const data = loadRsvpData();
   data.push(entry);
   saveRsvpData(data);
@@ -733,37 +825,35 @@ function submitRsvp(e) {
     mode: 'no-cors',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      fname: entry.fname,
-      lname: entry.lname,
-      email: entry.email,
-      phone: entry.phone,
-      attending: entry.attending,
-      guests: entry.guests,
+      fname: entry.fname, lname: entry.lname,
+      email: entry.email, phone: entry.phone,
+      attending: entry.attending, guests: entry.guests,
       events: entry.events.join(', '),
-      diet: entry.diet,
-      message: entry.message
+      diet: entry.diet, message: entry.message
     })
   });
+
+  /* 🎵 Play success sound */
+  playSuccessSound();
 
   /* Show success message */
   document.getElementById('rsvp-form-wrap').style.display = 'none';
   const success = document.getElementById('rsvp-success');
   success.style.display = 'block';
 
-  if (attending === 'yes') {
-    document.getElementById('success-msg').textContent =
-      'We are delighted that you\'ll be joining us, ' + entry.fname + '! Your presence will make our celebration even more special. We look forward to sharing this joyous occasion with you.';
-  } else {
-    document.getElementById('success-msg').textContent =
-      'Thank you for letting us know, ' + entry.fname + '. We will miss you dearly and carry your love and blessings in our hearts as we begin this new journey together.';
-  }
+  document.getElementById('success-msg').textContent = attending === 'yes'
+    ? 'We are delighted that you\'ll be joining us, ' + entry.fname + '! Your presence will make our celebration even more special. We look forward to sharing this joyous occasion with you.'
+    : 'Thank you for letting us know, ' + entry.fname + '. We will miss you dearly and carry your love and blessings in our hearts as we begin this new journey together.';
 
   success.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-/* ── Scroll reveal ── */
+
+/* ══════════════════════════════════════════
+   SCROLL REVEAL
+   ══════════════════════════════════════════ */
 const observer = new IntersectionObserver(entries => {
-  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
 }, { threshold: 0.15 });
 document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 </script>
