@@ -75,7 +75,7 @@
 
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(30px); }
-    to   { opacity: 1; transform: translateY(0); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   .invite-label {
@@ -337,6 +337,14 @@
 </style>
 </head>
 <body>
+
+<!-- Audio Elements -->
+<audio id="bg-melody" loop>
+  <source src="melody.mp3" type="audio/mpeg">
+</audio>
+<audio id="success-sound">
+  <source src="success.mp3" type="audio/mpeg">
+</audio>
 
 <!-- ══ HERO ══ -->
 <section class="hero" id="top">
@@ -622,6 +630,18 @@
 </footer>
 
 <script>
+/* ── Audio Control ── */
+const melody = document.getElementById('bg-melody');
+const successSound = document.getElementById('success-sound');
+
+// Start background melody on first click anywhere on page
+document.body.addEventListener('click', () => {
+    if (melody.paused) {
+        melody.play().catch(e => console.log("Audio play blocked"));
+        melody.volume = 0.5; // Starts at 50% volume
+    }
+}, { once: true });
+
 /* ── Countdown ── */
 const weddingDate = new Date('2026-02-14T10:00:00');
 
@@ -696,6 +716,10 @@ function submitRsvp(e) {
     message: document.getElementById('f-message').value,
     timestamp: new Date().toISOString()
   };
+
+  /* AUDIO TRIGGER */
+  melody.pause(); // Stop background melody
+  successSound.play(); // Play success sound
 
   /* Save locally */
   const data = loadRsvpData();
